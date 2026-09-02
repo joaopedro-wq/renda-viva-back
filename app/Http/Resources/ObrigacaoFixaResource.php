@@ -1,0 +1,29 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\ObrigacaoFixa;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * @mixin ObrigacaoFixa
+ */
+class ObrigacaoFixaResource extends JsonResource
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'descricao' => $this->descricao,
+            'valor' => $this->valor,
+            'dia_vencimento' => $this->dia_vencimento,
+            'ativa' => $this->ativa,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
+    }
+}
