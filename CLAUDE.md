@@ -38,13 +38,13 @@ Se o banco `renda_viva` ainda não existir:
 
 ## Tabelas
 
-| Tabela               | Colunas principais                                                                          | Papel                                                       |
-| --------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `categorias_gasto`    | `nome, icone, cor`                                                                             | Catálogo global seedado (10 categorias) — sem `usuario_id`.  |
-| `obrigacoes_fixas`    | `usuario_id, descricao, valor, dia_vencimento, ativa`                                          | Aluguel, assinaturas — sempre descontadas primeiro no cálculo semanal. |
-| `rendas`               | `usuario_id, descricao, fonte, valor, data_recebimento, recorrente`                           | `data_recebimento` é a data real do dinheiro — **nunca** uma data projetada/esperada. Sustenta o "modo prudente" do cálculo. |
-| `gastos`               | `usuario_id, categoria_gasto_id (nullable), obrigacao_fixa_id (nullable), descricao, valor, data` | Lançamento de gasto. Categoria opcional (usuário pode lançar sem categorizar). |
-| `movimentos_colchao`  | `usuario_id, valor (+/-), tipo (enum), descricao, data`                                        | Livro-razão do colchão — **nunca** um saldo solto no usuário. Saldo atual = `SUM(valor)` por `usuario_id`. |
+| Tabela               | Colunas principais                                                                                | Papel                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `categorias_gasto`   | `nome, icone, cor`                                                                                | Catálogo global seedado (10 categorias) — sem `usuario_id`.                                                                  |
+| `obrigacoes_fixas`   | `usuario_id, descricao, valor, dia_vencimento, ativa`                                             | Aluguel, assinaturas — sempre descontadas primeiro no cálculo semanal.                                                       |
+| `rendas`             | `usuario_id, descricao, fonte, valor, data_recebimento, recorrente`                               | `data_recebimento` é a data real do dinheiro — **nunca** uma data projetada/esperada. Sustenta o "modo prudente" do cálculo. |
+| `gastos`             | `usuario_id, categoria_gasto_id (nullable), obrigacao_fixa_id (nullable), descricao, valor, data` | Lançamento de gasto. Categoria opcional (usuário pode lançar sem categorizar).                                               |
+| `movimentos_colchao` | `usuario_id, valor (+/-), tipo (enum), descricao, data`                                           | Livro-razão do colchão — **nunca** um saldo solto no usuário. Saldo atual = `SUM(valor)` por `usuario_id`.                   |
 
 **Ordem de migration importa**: `categorias_gasto` → `obrigacoes_fixas` → `rendas` → `gastos`
 (depende das duas anteriores) → `movimentos_colchao`. Os arquivos usam sufixo `_1`/`_2`/`_3` no
@@ -65,8 +65,9 @@ inválido lança `SQLSTATE[23514]: Check violation`). Adicionar um tipo novo exi
 ## Models e padrão de projeto
 
 - **Controller fino, Service com a regra de negócio.** Nenhuma lógica financeira dentro de
-  controller — ex. o cálculo de "quanto dá pra gastar essa semana" (ainda não implementado, ver
-  roadmap) vai morar em `SafeToSpendService`, não em `PainelController`.
+  controller — o cálculo de "quanto dá pra gastar essa semana" mora em `SafeToSpendService`
+  (`PainelController` só chama), e o fechamento mensal do colchão mora em `CushionService`
+  (`FecharMesColchaoCommand` só chama).
 - **Todo model de domínio tem `scopeDoUsuario(int $usuarioId)`** (`Renda::doUsuario($id)`,
   idem pros outros 3 — `CategoriaGasto` não tem, é catálogo global). **Todo controller/endpoint
   de domínio precisa filtrar por ele** — nunca listar sem escopo de dono. Isso já é uma correção
@@ -80,25 +81,30 @@ inválido lança `SQLSTATE[23514]: Check violation`). Adicionar um tipo novo exi
 
 ## Contrato de rotas
 
-| Rota                             | Observação                                              |
-| --------------------------------- | -------------------------------------------------------- |
-| `POST /api/login`                 | Público. `{email, password}` → `{status, token, user, message}`, 201. 404 e-mail não encontrado, 401 senha errada. |
-| `POST /api/criar-usuario`         | Público. `{name, email, password, password_confirmation}` → `{message, data, success}`, 201. |
-| `GET /api/user/get-with-token`    | Protegida (`auth:sanctum`) — `{data: User}`.               |
-| `POST /api/logout`                | Protegida — revoga o token atual (`currentAccessToken()->delete()`). |
+| Rota                                                                      | Observação                                                                                                           |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/login`                                                         | Público. `{email, password}` → `{status, token, user, message}`, 201. 404 e-mail não encontrado, 401 senha errada.   |
+| `POST /api/criar-usuario`                                                 | Público. `{name, email, password, password_confirmation}` → `{message, data, success}`, 201.                         |
+| `GET /api/user/get-with-token`                                            | Protegida (`auth:sanctum`) — `{data: User}`.                                                                         |
+| `POST /api/logout`                                                        | Protegida — revoga o token atual (`currentAccessToken()->delete()`).                                                 |
+| `GET/POST/PUT/DELETE /api/rendas`, `/api/gastos`, `/api/obrigacoes-fixas` | Protegidas — CRUD REST padrão (`apiResource`), sempre escopado por `scopeDoUsuario`. `gastos` aceita `?mes=YYYY-MM`. |
+| `GET /api/painel/dado-da-semana`                                          | Protegida — `SafeToSpendService::calcular()`, payload em `{data: {...}}` (ver service pros campos).                  |
 
-Rotas de domínio (CRUD de `rendas`/`gastos`/`obrigacoes_fixas`, leitura de `movimentos_colchao`,
-endpoint do cálculo semanal) ainda não existem — ver Fase 2+ de `PROXIMAS-FEATURES.md` antes de
-criar qualquer uma; o formato exato (nome de rota, payload) está proposto lá, não redecidir do
-zero.
+Leitura de `movimentos_colchao` (extrato) ainda não tem endpoint — só é criado internamente pelo
+`CushionService`/`colchao:fechar-mes`. Ver Fase 5+ de `PROXIMAS-FEATURES.md` antes de criar
+qualquer rota nova de domínio.
 
 ## Decisões de arquitetura
 
 - **Nunca adicionar `EnsureFrontendRequestsAreStateful`** em `bootstrap/app.php` — ver Stack acima.
 - **Colchão só é alimentado por fechamento mensal automático** (comando agendado), não a cada
-  lançamento de renda — decisão de produto já tomada nesta sessão, não redecidir. Ver Fase 4 de
-  `PROXIMAS-FEATURES.md` pro desenho completo (dois parâmetros — janela da linha de base e
-  percentual de aporte/saque — ainda em aberto, validar com o usuário antes de implementar).
+  lançamento de renda — decisão de produto já tomada nesta sessão, não redecidir. Implementado em
+  `CushionService::fecharMes()` + `php artisan colchao:fechar-mes` (agendado dia 1, 00:10,
+  `America/Sao_Paulo`, ver `routes/console.php`). Parâmetros validados com o usuário (não
+  redecidir): linha de base = média simples da renda dos 3 meses anteriores ao mês fechado (sem
+  o mês fechado em si); aporte/saque automático = 20% do excedente/déficit sobre essa linha de
+  base. Sem histórico nos 3 meses anteriores, o fechamento não faz nada (usuário novo). Saque
+  nunca deixa o saldo do colchão negativo.
 - **"Modo prudente" é o único modo de cálculo por ora**: nunca projetar renda futura. Se um dia
   entrar um "modo otimista" (projeção), é opt-in explícito do usuário, nunca o padrão.
 - **CORS**: `config/cors.php` já existe, restrito a `FRONTEND_URL` (`api/*` apenas,

@@ -11,7 +11,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class GastoResource extends JsonResource
 {
-    
     public static bool $forceWrapping = true;
 
     /**

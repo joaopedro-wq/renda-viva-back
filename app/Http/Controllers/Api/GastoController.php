@@ -10,10 +10,8 @@ use App\Models\Gasto;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
-
 class GastoController extends Controller
 {
-    
     public function index(Request $request)
     {
         $query = Gasto::doUsuario($request->user()->id);
@@ -67,7 +65,6 @@ class GastoController extends Controller
         return response()->json(null, 204);
     }
 
-  
     private function autorizarDono(Request $request, Gasto $gasto): void
     {
         abort_if($gasto->usuario_id !== $request->user()->id, 404);
