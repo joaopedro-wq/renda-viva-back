@@ -8,7 +8,6 @@ use App\Models\User;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
-
 class CushionService
 {
     private const PERCENTUAL_APORTE_SAQUE = 0.20;

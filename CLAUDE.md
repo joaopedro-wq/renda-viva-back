@@ -88,11 +88,9 @@ inválido lança `SQLSTATE[23514]: Check violation`). Adicionar um tipo novo exi
 | `GET /api/user/get-with-token`                                            | Protegida (`auth:sanctum`) — `{data: User}`.                                                                         |
 | `POST /api/logout`                                                        | Protegida — revoga o token atual (`currentAccessToken()->delete()`).                                                 |
 | `GET/POST/PUT/DELETE /api/rendas`, `/api/gastos`, `/api/obrigacoes-fixas` | Protegidas — CRUD REST padrão (`apiResource`), sempre escopado por `scopeDoUsuario`. `gastos` aceita `?mes=YYYY-MM`. |
+| `GET /api/categorias-gasto`                                              | Protegida — catálogo global, sem `scopeDoUsuario` (é o mesmo pra todo mundo).                                        |
+| `GET /api/movimentos-colchao`                                            | Protegida — só leitura, escopada. Aceita `?mes=YYYY-MM`. Nunca cria/edita — isso é só `CushionService`.              |
 | `GET /api/painel/dado-da-semana`                                          | Protegida — `SafeToSpendService::calcular()`, payload em `{data: {...}}` (ver service pros campos).                  |
-
-Leitura de `movimentos_colchao` (extrato) ainda não tem endpoint — só é criado internamente pelo
-`CushionService`/`colchao:fechar-mes`. Ver Fase 5+ de `PROXIMAS-FEATURES.md` antes de criar
-qualquer rota nova de domínio.
 
 ## Decisões de arquitetura
 

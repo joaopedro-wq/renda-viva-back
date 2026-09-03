@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CategoriaGastoController;
 use App\Http\Controllers\Api\GastoController;
+use App\Http\Controllers\Api\MovimentoColchaoController;
 use App\Http\Controllers\Api\ObrigacaoFixaController;
 use App\Http\Controllers\Api\PainelController;
 use App\Http\Controllers\Api\RendaController;
@@ -19,6 +21,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('rendas', RendaController::class);
     Route::apiResource('gastos', GastoController::class);
     Route::apiResource('obrigacoes-fixas', ObrigacaoFixaController::class);
+    Route::get('/categorias-gasto', [CategoriaGastoController::class, 'index']);
+    Route::get('/movimentos-colchao', [MovimentoColchaoController::class, 'index']);
 
     Route::get('/painel/dado-da-semana', [PainelController::class, 'dadoDaSemana']);
 });
