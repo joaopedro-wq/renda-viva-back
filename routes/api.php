@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/modelos-importacao', [ModeloImportacaoController::class, 'index']);
 
     Route::post('/importacoes/pre-visualizar', [ImportacaoController::class, 'preVisualizar']);
+    Route::post('/importacoes/upload-chunk', [ImportacaoController::class, 'uploadChunk']);
     Route::post('/importacoes/confirmar', [ImportacaoController::class, 'confirmar']);
 
     Route::get('/painel/dado-da-semana', [PainelController::class, 'dadoDaSemana']);
