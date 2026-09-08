@@ -20,6 +20,7 @@ class RendaResource extends JsonResource
             'id' => $this->id,
             'descricao' => $this->descricao,
             'fonte' => $this->fonte,
+            'categoria_renda_id' => $this->categoria_renda_id,
             'valor' => $this->valor,
             'data_recebimento' => $this->data_recebimento->toDateString(),
             'recorrente' => $this->recorrente,

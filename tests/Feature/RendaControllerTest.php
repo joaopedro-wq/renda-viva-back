@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CategoriaRenda;
 use App\Models\Renda;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,6 +52,43 @@ class RendaControllerTest extends TestCase
             'usuario_id' => $usuario->id,
             'descricao' => 'Freela de design',
         ]);
+    }
+
+    public function test_store_aceita_categoria_de_renda(): void
+    {
+        $usuario = User::factory()->create();
+        $salario = CategoriaRenda::create(['nome' => 'Salário', 'icone' => 'briefcase', 'cor' => '#000']);
+
+        $payload = [
+            'descricao' => 'Salário de agosto',
+            'fonte' => 'Empresa X',
+            'categoria_renda_id' => $salario->id,
+            'valor' => 3000,
+            'data_recebimento' => '2026-09-01',
+            'recorrente' => true,
+        ];
+
+        $response = $this->actingAs($usuario, 'sanctum')->postJson('/api/rendas', $payload);
+
+        $response->assertStatus(201)->assertJsonPath('data.categoria_renda_id', $salario->id);
+    }
+
+    public function test_store_rejeita_categoria_de_renda_inexistente(): void
+    {
+        $usuario = User::factory()->create();
+
+        $payload = [
+            'descricao' => 'Salário',
+            'fonte' => 'Empresa X',
+            'categoria_renda_id' => 999,
+            'valor' => 3000,
+            'data_recebimento' => '2026-09-01',
+        ];
+
+        $this->actingAs($usuario, 'sanctum')
+            ->postJson('/api/rendas', $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['categoria_renda_id']);
     }
 
     public function test_store_valida_campos_obrigatorios(): void

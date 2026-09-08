@@ -17,9 +17,11 @@ class Renda extends Model
         'usuario_id',
         'descricao',
         'fonte',
+        'categoria_renda_id',
         'valor',
         'data_recebimento',
         'recorrente',
+        'origem_externa_id',
     ];
 
     protected function casts(): array
@@ -34,6 +36,11 @@ class Renda extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_id');
+    }
+
+    public function categoriaRenda(): BelongsTo
+    {
+        return $this->belongsTo(CategoriaRenda::class);
     }
 
     /** Nunca listar renda de outro usuário — todo endpoint passa por aqui. */

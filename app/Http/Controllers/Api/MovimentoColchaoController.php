@@ -8,10 +8,8 @@ use App\Models\MovimentoColchao;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
-
 class MovimentoColchaoController extends Controller
 {
-   
     public function index(Request $request)
     {
         $query = MovimentoColchao::doUsuario($request->user()->id);

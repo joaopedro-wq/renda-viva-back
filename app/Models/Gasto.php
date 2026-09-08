@@ -20,6 +20,7 @@ class Gasto extends Model
         'descricao',
         'valor',
         'data',
+        'origem_externa_id',
     ];
 
     protected function casts(): array

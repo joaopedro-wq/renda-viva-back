@@ -17,8 +17,15 @@ por lá antes de implementar algo novo (é um arquivo só, compartilhado entre o
 - **PostgreSQL** em dev (banco `renda_viva`, mesma instância local do `vitality-Back` — usuário
   `postgres`). **Testes automatizados usam SQLite em memória** (`phpunit.xml`), nunca o Postgres
   de dev — mesma regra do `vitality-Back`, existe pra testes não colidirem com dado real.
-- **Tabelas de domínio em PT-BR** (`rendas`, `gastos`, `categorias_gasto`, `obrigacoes_fixas`,
-  `movimentos_colchao`) — mesmo padrão do `vitality-Back` (`alimento`, `refeicao`, `dieta`,
+  **Nunca rodar `php artisan config:cache` (nem `optimize`) em dev**: com o config cacheado, o
+  Laravel para de ler `env()` em runtime e usa o que foi congelado no cache — inclusive `DB_*` —,
+  então os overrides de `DB_CONNECTION=sqlite`/`DB_DATABASE=:memory:` que o `phpunit.xml` injeta
+  pra teste são ignorados e `RefreshDatabase` acaba migrando (`--fresh`, ou seja, dropando tudo)
+  direto no Postgres de dev. Já aconteceu nesta sessão (`bootstrap/cache/config.php` presente
+  apagou o banco `rendaviva` inteiro) — corrigido com `php artisan config:clear`. Se o config
+  cache voltar a aparecer, remover antes de rodar qualquer teste.
+- **Tabelas de domínio em PT-BR** (`rendas`, `gastos`, `categorias_gasto`, `categorias_renda`,
+  `obrigacoes_fixas`, `movimentos_colchao`) — mesmo padrão do `vitality-Back` (`alimento`, `refeicao`, `dieta`,
   `meta`, `recomendacao`). A tabela `users` (Laravel/Sanctum) fica em inglês, é a única exceção —
   é convenção do framework, não do domínio.
 - Todo valor monetário é `decimal(12,2)` — nunca `float`/`double`.
@@ -41,10 +48,16 @@ Se o banco `renda_viva` ainda não existir:
 | Tabela               | Colunas principais                                                                                | Papel                                                                                                                        |
 | -------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `categorias_gasto`   | `nome, icone, cor`                                                                                | Catálogo global seedado (10 categorias) — sem `usuario_id`.                                                                  |
+| `categorias_renda`   | `nome, icone, cor`                                                                                | Catálogo global seedado (Salário, Freelance, Vendas, Comissão, Investimentos, Outros) — sem `usuario_id`.                    |
 | `obrigacoes_fixas`   | `usuario_id, descricao, valor, dia_vencimento, ativa`                                             | Aluguel, assinaturas — sempre descontadas primeiro no cálculo semanal.                                                       |
-| `rendas`             | `usuario_id, descricao, fonte, valor, data_recebimento, recorrente`                               | `data_recebimento` é a data real do dinheiro — **nunca** uma data projetada/esperada. Sustenta o "modo prudente" do cálculo. |
+| `rendas`             | `usuario_id, descricao, fonte, categoria_renda_id (nullable), valor, data_recebimento, recorrente` | `data_recebimento` é a data real do dinheiro — **nunca** uma data projetada/esperada. Sustenta o "modo prudente" do cálculo. Categoria opcional. |
 | `gastos`             | `usuario_id, categoria_gasto_id (nullable), obrigacao_fixa_id (nullable), descricao, valor, data` | Lançamento de gasto. Categoria opcional (usuário pode lançar sem categorizar).                                               |
 | `movimentos_colchao` | `usuario_id, valor (+/-), tipo (enum), descricao, data`                                           | Livro-razão do colchão — **nunca** um saldo solto no usuário. Saldo atual = `SUM(valor)` por `usuario_id`.                   |
+| `modelos_importacao` | `usuario_id, nome, assinatura_colunas, coluna_data, coluna_valor, coluna_descricao, coluna_identificador (nullable), formato_data, convencao_sinal` | Mapeamento de colunas de um formato de extrato (Fase 8), reconhecido automaticamente pela assinatura do cabeçalho do CSV. |
+
+`rendas` e `gastos` também têm `origem_externa_id` (nullable, unique por `usuario_id`) — guarda o
+identificador da transação no extrato de origem (ex.: UUID do Nubank). É o dedupe de importação:
+reimportar o mesmo arquivo/mês sobreposto pula linhas já importadas em vez de duplicar.
 
 **Ordem de migration importa**: `categorias_gasto` → `obrigacoes_fixas` → `rendas` → `gastos`
 (depende das duas anteriores) → `movimentos_colchao`. Os arquivos usam sufixo `_1`/`_2`/`_3` no
@@ -89,8 +102,12 @@ inválido lança `SQLSTATE[23514]: Check violation`). Adicionar um tipo novo exi
 | `POST /api/logout`                                                        | Protegida — revoga o token atual (`currentAccessToken()->delete()`).                                                 |
 | `GET/POST/PUT/DELETE /api/rendas`, `/api/gastos`, `/api/obrigacoes-fixas` | Protegidas — CRUD REST padrão (`apiResource`), sempre escopado por `scopeDoUsuario`. `gastos` aceita `?mes=YYYY-MM`. |
 | `GET /api/categorias-gasto`                                              | Protegida — catálogo global, sem `scopeDoUsuario` (é o mesmo pra todo mundo).                                        |
+| `GET /api/categorias-renda`                                              | Protegida — catálogo global, sem `scopeDoUsuario`.                                                                   |
 | `GET /api/movimentos-colchao`                                            | Protegida — só leitura, escopada. Aceita `?mes=YYYY-MM`. Nunca cria/edita — isso é só `CushionService`.              |
 | `GET /api/painel/dado-da-semana`                                          | Protegida — `SafeToSpendService::calcular()`, payload em `{data: {...}}` (ver service pros campos).                  |
+| `GET /api/modelos-importacao`                                            | Protegida — só leitura. Modelos são criados só via `ImportacaoController` (Fase 8).                                  |
+| `POST /api/importacoes/pre-visualizar`                                   | Protegida — multipart (`arquivo` + `modelo_importacao_id` ou `mapeamento` opcionais). Nunca grava lançamento, no máximo cria um `ModeloImportacao` novo. Cabeçalho Nubank Conta (`Data,Valor,Identificador,Descrição`) é reconhecido automaticamente, sem precisar de `mapeamento`. |
+| `POST /api/importacoes/confirmar`                                        | Protegida — grava `rendas`/`gastos` em lote a partir das linhas revisadas. Dedupe por `origem_externa_id`.           |
 
 ## Decisões de arquitetura
 
@@ -110,3 +127,9 @@ inválido lança `SQLSTATE[23514]: Check violation`). Adicionar um tipo novo exi
   CORS no front, checar **primeiro** se o backend está rodando (`php artisan serve --port=8001`)
   antes de mexer em `cors.php` — Firefox/Chrome relatam falha de conexão (servidor fora do ar)
   como erro de CORS genérico, o que já confundiu uma vez nesta sessão.
+- **`bootstrap/app.php` tem `redirectGuestsTo(fn () => null)`**: sem isso, o `Authenticate`
+  padrão do Laravel tenta `route('login')` quando uma requisição não pede JSON (ex.: curl sem
+  `Accept: application/json`) — como esse projeto é API-only (não existe rota `login` de verdade),
+  isso crashava com 500 (`RouteNotFoundException`) em vez de devolver 401 numa rota protegida. Bug
+  real encontrado e corrigido nesta sessão, com teste (`AuthExceptionRenderTest`) travando a
+  regressão. Não remover essa linha.

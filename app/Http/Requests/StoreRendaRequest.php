@@ -19,6 +19,7 @@ class StoreRendaRequest extends FormRequest
         return [
             'descricao' => ['required', 'string', 'max:255'],
             'fonte' => ['required', 'string', 'max:255'],
+            'categoria_renda_id' => ['nullable', 'exists:categorias_renda,id'],
             'valor' => ['required', 'numeric', 'min:0.01'],
             'data_recebimento' => ['required', 'date'],
             'recorrente' => ['sometimes', 'boolean'],
